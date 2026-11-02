@@ -1,0 +1,97 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wise-mcp"
+version = "0.1.0"
+description = "Secure, standalone Wise Hybrid MCP Server for multi-currency treasury, SCA signing, and payouts"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Wise MCP Contributors" }
+]
+keywords = ["wise", "transferwise", "mcp", "treasury", "payments", "fx", "sca", "banking"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "cryptography>=42.0.0",
+    "httpx>=0.27.0,<1",
+    "keyring>=24.0.0",
+    "mcp>=1.12.0,<2",
+    "pydantic>=2.7.0,<3",
+    "pydantic-settings>=2.2.0,<3",
+    "python-dotenv>=1.0.0,<2",
+    "typing-extensions>=4.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/wise-mcp/wise-mcp"
+Repository = "https://github.com/wise-mcp/wise-mcp"
+Issues = "https://github.com/wise-mcp/wise-mcp/issues"
+
+[project.optional-dependencies]
+dev = [
+    "bandit>=1.8.0",
+    "build>=1.2.0",
+    "mypy>=1.14.0",
+    "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.12.0",
+    "twine>=5.0.0",
+]
+
+[project.scripts]
+wise-mcp = "wise_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["wise_mcp", "wise"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["wise", "wise_mcp"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+[tool.mypy]
+files = ["wise", "wise_mcp"]
+python_version = "3.10"
+check_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["wise_mcp.server", "wise_mcp.tools.*"]
+disable_error_code = ["call-arg"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+ignore_errors = true
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
