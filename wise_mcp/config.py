@@ -51,6 +51,12 @@ def get_keyring_secret(service_name: str, account: str) -> str | None:
         )
         if proc.returncode == 0 and proc.stdout.strip():
             secret = proc.stdout.strip()
+            # macOS `security find-generic-password -w` hex-encodes multiline values (such as PEM keys)
+            if secret.startswith("2d2d2d2d2d"):
+                try:
+                    secret = bytes.fromhex(secret).decode("utf-8").strip()
+                except ValueError:
+                    pass
             _KEYRING_CACHE[cache_key] = secret
             return secret
         return None

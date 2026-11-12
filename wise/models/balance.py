@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 BalanceType = Literal["STANDARD", "SAVINGS"]
@@ -41,4 +41,4 @@ class Balance(BaseModel):
     name: str | None = Field(
         default=None, description="Custom jar name (if type is SAVINGS)"
     )
-    icon: str | None = Field(default=None, description="Optional icon identifier")
+    icon: Any = Field(default=None, description="Optional icon identifier or emoji object")

@@ -53,7 +53,13 @@ def load_private_key(pem_data: str | bytes, password: bytes | None = None) -> An
     Raises:
         ValidationError: If key cannot be loaded or is not an RSA private key.
     """
-    raw_bytes = pem_data.encode("utf-8") if isinstance(pem_data, str) else pem_data
+    if isinstance(pem_data, str) and pem_data.strip().startswith("2d2d2d2d2d"):
+        try:
+            raw_bytes = bytes.fromhex(pem_data.strip())
+        except ValueError:
+            raw_bytes = pem_data.encode("utf-8")
+    else:
+        raw_bytes = pem_data.encode("utf-8") if isinstance(pem_data, str) else pem_data
     try:
         key = serialization.load_pem_private_key(
             raw_bytes,
