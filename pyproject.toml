@@ -36,9 +36,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/wise-mcp/wise-mcp"
-Repository = "https://github.com/wise-mcp/wise-mcp"
-Issues = "https://github.com/wise-mcp/wise-mcp/issues"
+Homepage = "https://github.com/hemelbesem90s/Wise-MCP"
+Repository = "https://github.com/hemelbesem90s/Wise-MCP"
+Issues = "https://github.com/hemelbesem90s/Wise-MCP/issues"
 
 [project.optional-dependencies]
 dev = [

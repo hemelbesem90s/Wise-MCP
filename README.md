@@ -98,8 +98,8 @@ pip install wise-mcp
 Or install in development mode from source:
 
 ```bash
-git clone https://github.com/wise-mcp/wise-mcp.git
-cd wise-mcp
+git clone https://github.com/hemelbesem90s/Wise-MCP.git
+cd Wise-MCP
 uv venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
@@ -138,10 +138,10 @@ wise-mcp --generate-sca-keys
 wise-mcp --generate-sca-keys ~/.config/wise/private.pem
 ```
 
-The CLI will print the **Public Key** to your terminal. Copy and paste this public key into Wise:
+The CLI prints the **Public Key (`-----BEGIN PUBLIC KEY----- ...`)** to your terminal. Save that block as `wise_public.pem` and upload it to Wise:
 1. Log in to [Wise Business](https://wise.com).
 2. Go to **Settings** $\rightarrow$ **API tokens**.
-3. Under **Manage 2FA keys**, click **Upload public key** and paste the public key.
+3. Under **Manage 2FA keys** (or **Add new key**), upload `wise_public.pem` and copy your API token.
 
 ---
 
