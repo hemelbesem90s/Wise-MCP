@@ -315,6 +315,7 @@ class WiseClient:
         source_amount: float | None = None,
         target_amount: float | None = None,
         target_account_id: int | None = None,
+        pay_in: str = "BALANCE",
     ) -> Quote:
         """Create an authenticated quote locking in the FX rate and exact Wise fee."""
         if (source_amount is None and target_amount is None) or (
@@ -338,8 +339,31 @@ class WiseClient:
         if target_account_id is not None:
             payload["targetAccount"] = target_account_id
 
+        if pay_in:
+            payload["payIn"] = pay_in.upper()
+            payload["preferredPayIn"] = pay_in.upper()
+
         data = await self.request(
             "POST", f"/v3/profiles/{profile_id}/quotes", json=payload
+        )
+        return Quote.model_validate(data)
+
+    async def update_quote(
+        self,
+        profile_id: int,
+        quote_id: str | int,
+        *,
+        pay_in: str | None = None,
+        target_account_id: int | None = None,
+    ) -> Quote:
+        """Update an existing quote (e.g. locking payIn or targetAccount)."""
+        payload: dict[str, Any] = {}
+        if pay_in is not None:
+            payload["payIn"] = pay_in.upper()
+        if target_account_id is not None:
+            payload["targetAccount"] = target_account_id
+        data = await self.request(
+            "PATCH", f"/v3/profiles/{profile_id}/quotes/{quote_id}", json=payload
         )
         return Quote.model_validate(data)
 
@@ -512,6 +536,11 @@ class WiseClient:
             "details": details,
         }
         data = await self.request("POST", "/v1/transfers", json=payload)
+        return Transfer.model_validate(data)
+
+    async def cancel_transfer(self, transfer_id: int) -> Transfer:
+        """Cancel an existing pending/unfunded transfer in Wise."""
+        data = await self.request("PUT", f"/v1/transfers/{transfer_id}/cancel")
         return Transfer.model_validate(data)
 
     async def fund_transfer(

@@ -95,6 +95,12 @@ async def test_create_and_get_quote(
             body = json.loads(request.content.decode("utf-8"))
             assert body["sourceCurrency"] == "EUR"
             assert body["targetCurrency"] == "ZAR"
+            assert body["payIn"] == "BALANCE"
+            assert body["preferredPayIn"] == "BALANCE"
+            return httpx.Response(200, json=sample_quote)
+        if request.method == "PATCH" and "/quotes/quote-uuid-abc-123" in request.url.path:
+            body = json.loads(request.content.decode("utf-8"))
+            assert body["payIn"] == "BALANCE"
             return httpx.Response(200, json=sample_quote)
         if request.method == "GET" and "/quotes/quote-uuid-abc-123" in request.url.path:
             return httpx.Response(200, json=sample_quote)
@@ -111,6 +117,9 @@ async def test_create_and_get_quote(
 
         fetched = await client.get_quote(12345, "quote-uuid-abc-123")
         assert fetched.id == "quote-uuid-abc-123"
+
+        patched = await client.update_quote(12345, "quote-uuid-abc-123", pay_in="BALANCE")
+        assert patched.id == "quote-uuid-abc-123"
 
         # Invalid: both source and target amounts
         with pytest.raises(ValidationError, match="Exactly one of"):
@@ -204,6 +213,10 @@ async def test_transfers_and_funding(
             return httpx.Response(200, json=sample_transfers[0])
         if request.method == "POST" and request.url.path == "/v1/transfers":
             return httpx.Response(200, json=sample_transfers[0])
+        if request.method == "PUT" and request.url.path == "/v1/transfers/9991/cancel":
+            cancelled = dict(sample_transfers[0])
+            cancelled["status"] = "cancelled"
+            return httpx.Response(200, json=cancelled)
         if (
             request.method == "POST"
             and request.url.path == "/v3/profiles/12345/transfers/9991/payments"
@@ -228,6 +241,9 @@ async def test_transfers_and_funding(
             5551, "quote-uuid-abc-123", reference="INV-2026-001"
         )
         assert staged.status == "incoming_payment_waiting"
+
+        cancelled = await client.cancel_transfer(9991)
+        assert cancelled.status == "cancelled"
 
         payment = await client.fund_transfer(12345, 9991, balance_id=101)
         assert payment.status == "COMPLETED"

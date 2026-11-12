@@ -19,6 +19,7 @@ WRITE_TOOL_NAMES: tuple[str, ...] = (
     "create_quote",
     "create_recipient",
     "stage_transfer",
+    "cancel_transfer",
     "fund_transfer",
 )
 

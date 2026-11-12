@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from wise_mcp.tools import (
+    CancelTransferTool,
     CreateQuoteTool,
     CreateRecipientTool,
     FundTransferTool,
@@ -27,8 +28,10 @@ def test_registry_registration() -> None:
     reg = ToolRegistry()
     register_all_tools(reg)
     tools = reg.list_tools()
-    assert len(tools) == 12
+    assert len(tools) == 13
     assert reg.get("list_profiles") is not None
+    assert reg.get("stage_transfer") is not None
+    assert reg.get("cancel_transfer") is not None
     assert reg.get("fund_transfer") is not None
 
 
@@ -102,6 +105,15 @@ async def test_quote_tools() -> None:
         {"source_currency": "EUR", "target_currency": "ZAR", "source_amount": 500.0},
     )
     assert res_create["id"] == "q-2"
+    client.create_quote.assert_called_with(
+        111,
+        "EUR",
+        "ZAR",
+        source_amount=500.0,
+        target_amount=None,
+        target_account_id=None,
+        pay_in="BALANCE",
+    )
 
     # Missing profile raises
     client.list_profiles.return_value = [MagicMock(id=1), MagicMock(id=2)]
@@ -216,6 +228,7 @@ async def test_transfers_tools_execution() -> None:
     list_tool = ListTransfersTool()
     get_tool = GetTransferTool()
     stage_tool = StageTransferTool()
+    cancel_tool = CancelTransferTool()
     fund_tool = FundTransferTool()
 
     client = AsyncMock()
@@ -223,6 +236,7 @@ async def test_transfers_tools_execution() -> None:
     client.list_transfers.return_value = [MagicMock(model_dump=lambda: {"id": 11})]
     client.get_transfer.return_value = MagicMock(model_dump=lambda: {"id": 11, "status": "processing"})
     client.stage_transfer.return_value = MagicMock(model_dump=lambda: {"id": 12, "status": "incoming_payment_waiting"})
+    client.cancel_transfer.return_value = MagicMock(model_dump=lambda: {"id": 12, "status": "cancelled"})
     client.fund_transfer.return_value = MagicMock(model_dump=lambda: {"status": "COMPLETED"})
 
     res_list = await list_tool.execute(client, {})
@@ -240,6 +254,10 @@ async def test_transfers_tools_execution() -> None:
         },
     )
     assert res_stage["status"] == "incoming_payment_waiting"
+
+    res_cancel = await cancel_tool.execute(client, {"transfer_id": 12})
+    assert res_cancel["status"] == "cancelled"
+    client.cancel_transfer.assert_called_with(12)
 
     res_fund = await fund_tool.execute(client, {"transfer_id": 12})
     assert res_fund["status"] == "COMPLETED"

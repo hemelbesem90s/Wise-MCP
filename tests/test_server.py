@@ -139,11 +139,11 @@ async def test_server_call_write_tool_biometric_denied(
         res = await server.request_handlers[CallToolRequest](
             CallToolRequest(
                 params=CallToolRequestParams(
-                    name="create_quote",
+                    name="stage_transfer",
                     arguments={
-                        "source_currency": "EUR",
-                        "target_currency": "ZAR",
-                        "source_amount": 100.0,
+                        "target_account_id": 5551,
+                        "quote_uuid": "quote-xyz-123",
+                        "reference": "INV-101",
                         "confirm": True,
                     },
                 )
@@ -166,8 +166,8 @@ async def test_server_call_write_tool_success(
     mock_client.create_quote.return_value = MagicMock(model_dump=lambda: sample_quote)
 
     with patch.object(WiseMCPServer, "get_client") as mock_get_client, patch(
-        "wise_mcp.server.verify_user_presence", return_value=True
-    ):
+        "wise_mcp.server.verify_user_presence"
+    ) as mock_verify:
         mock_get_client.return_value.__aenter__.return_value = mock_client
         res = await server.request_handlers[CallToolRequest](
             CallToolRequest(
@@ -185,6 +185,84 @@ async def test_server_call_write_tool_success(
         assert res.root.isError is not True
         data = json.loads(res.root.content[0].text)
         assert data["id"] == "quote-uuid-abc-123"
+        # create_quote is exempt from biometric verification
+        mock_verify.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_server_stage_and_fund_transfer_biometric_ttl(
+    test_mcp_config: MCPConfig, sample_transfers: list[dict[str, Any]]
+) -> None:
+    test_mcp_config.enable_write_tools = True
+    test_mcp_config.biometric_ttl_seconds = 300
+    server = create_server(test_mcp_config)
+
+    mock_client = AsyncMock()
+    mock_client.config.profile_id = 12345
+    mock_client.stage_transfer.return_value = MagicMock(
+        model_dump=lambda: sample_transfers[0]
+    )
+    mock_client.cancel_transfer.return_value = MagicMock(
+        model_dump=lambda: {**sample_transfers[0], "status": "cancelled"}
+    )
+    mock_client.fund_transfer.return_value = MagicMock(
+        model_dump=lambda: {"type": "BALANCE", "status": "COMPLETED"}
+    )
+
+    with patch.object(WiseMCPServer, "get_client") as mock_get_client, patch(
+        "wise_mcp.server.verify_user_presence", return_value=True
+    ) as mock_verify:
+        mock_get_client.return_value.__aenter__.return_value = mock_client
+
+        # 1. stage_transfer -> called with ttl_seconds=300
+        res_stage = await server.request_handlers[CallToolRequest](
+            CallToolRequest(
+                params=CallToolRequestParams(
+                    name="stage_transfer",
+                    arguments={
+                        "target_account_id": 5551,
+                        "quote_uuid": "quote-uuid-abc-123",
+                        "reference": "INV-2026-001",
+                        "confirm": True,
+                    },
+                )
+            )
+        )
+        assert res_stage.root.isError is not True
+        mock_verify.assert_called_with(
+            "Wise MCP: Approve staging transfer of quote 'quote-uuid-abc-123' to recipient 5551 (Ref: INV-2026-001)?",
+            ttl_seconds=300,
+        )
+
+        # 2. cancel_transfer -> called with ttl_seconds=300
+        res_cancel = await server.request_handlers[CallToolRequest](
+            CallToolRequest(
+                params=CallToolRequestParams(
+                    name="cancel_transfer",
+                    arguments={"transfer_id": 9991, "confirm": True},
+                )
+            )
+        )
+        assert res_cancel.root.isError is not True
+        mock_verify.assert_called_with(
+            "Wise MCP: Approve CANCELLING Transfer #9991?",
+            ttl_seconds=300,
+        )
+
+        # 3. fund_transfer -> destructive, ALWAYS called with ttl_seconds=0
+        res_fund = await server.request_handlers[CallToolRequest](
+            CallToolRequest(
+                params=CallToolRequestParams(
+                    name="fund_transfer",
+                    arguments={"transfer_id": 9991, "confirm": True},
+                )
+            )
+        )
+        assert res_fund.root.isError is not True
+        mock_verify.assert_called_with(
+            "Wise MCP: Approve FUNDING payout of Transfer #9991 from Wise default balance?",
+            ttl_seconds=0,
+        )
 
 
 def test_cli_set_token() -> None:

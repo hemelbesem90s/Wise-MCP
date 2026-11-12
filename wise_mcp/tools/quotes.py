@@ -69,6 +69,10 @@ class CreateQuoteInput(ToolSchema):
         default=None,
         description="Optional recipient account ID to lock destination routing",
     )
+    pay_in: str = Field(
+        default="BALANCE",
+        description="Payment method to fund the transfer (default: 'BALANCE' for multi-currency account balance with €0 fee)",
+    )
     profile_id: int | None = Field(
         default=None,
         description="Profile ID creating the quote (optional if configured in server environment)",
@@ -106,5 +110,6 @@ class CreateQuoteTool(BaseTool):
             source_amount=arguments.get("source_amount"),
             target_amount=arguments.get("target_amount"),
             target_account_id=arguments.get("target_account_id"),
+            pay_in=arguments.get("pay_in", "BALANCE"),
         )
         return quote.model_dump()

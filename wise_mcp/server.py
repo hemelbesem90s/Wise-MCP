@@ -71,6 +71,7 @@ class WiseMCPServer:
         self.config = config
         self.registry = ToolRegistry()
         self._client: WiseClient | None = None
+        self.biometric_lock = asyncio.Lock()
 
         # Register tools
         register_all_tools(self.registry)
@@ -216,10 +217,20 @@ def create_server(config: MCPConfig | None = None) -> Server:
             execution_arguments.pop("confirm_write", None)
 
             # Lock 3: Native Hardware Biometric Gate
-            if mcp_server.config.require_biometric:
+            if mcp_server.config.require_biometric and name != "create_quote":
                 prompt = format_write_prompt(name, execution_arguments)
+                ttl = (
+                    0
+                    if name in DESTRUCTIVE_TOOL_NAMES
+                    else mcp_server.config.biometric_ttl_seconds
+                )
                 try:
-                    verify_user_presence(prompt)
+                    async with mcp_server.biometric_lock:
+                        await asyncio.to_thread(
+                            verify_user_presence,
+                            prompt,
+                            ttl_seconds=ttl,
+                        )
                 except (
                     BiometricVerificationDenied,
                     BiometricHardwareUnavailable,

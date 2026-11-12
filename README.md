@@ -23,7 +23,7 @@ A secure, vendor-neutral, standalone [Model Context Protocol (MCP)](https://mode
 
 ---
 
-## 🛠️ Tool Catalog (12 Tools)
+## 🛠️ Tool Catalog (13 Tools)
 
 ### Read Tools (Enabled by Default)
 
@@ -42,10 +42,11 @@ A secure, vendor-neutral, standalone [Model Context Protocol (MCP)](https://mode
 
 | Tool Name | Description |
 | :--- | :--- |
-| `create_quote` | Create an authenticated quote locking in the mid-market exchange rate and exact Wise transfer fee for 30 minutes. Returns `quoteUuid` needed for transfer staging. |
+| `create_quote` | Create an authenticated quote locking in the mid-market exchange rate and transfer fee for 30 minutes. Defaults to `pay_in="BALANCE"` (€0 fee for EUR SEPA) and returns `quoteUuid` needed for transfer staging. |
 | `create_recipient` | Register a new beneficiary recipient bank account (supports SEPA IBAN for EUR, UK Sort Code for GBP, South African clearing codes for ZAR, and US ACH for USD). |
-| `stage_transfer` | Create and queue an unfunded transfer in Wise in `incoming_payment_waiting` state with an invoice reference and client idempotency UUID (`customerTransactionId`). Allows review in the Wise mobile app before funding. |
-| `fund_transfer` | **High-Risk Operation**: Fund and execute a pending transfer order from a Wise multi-currency balance. |
+| `stage_transfer` | Create and queue an unfunded transfer in Wise in `incoming_payment_waiting` state with an invoice reference and client idempotency UUID (`customerTransactionId`). |
+| `cancel_transfer` | Cancel an existing pending or unfunded transfer in Wise before it is funded or processed. |
+| `fund_transfer` | **High-Risk Operation**: Irrevocably fund and execute a pending transfer order from a Wise multi-currency balance (always requires fresh biometric prompt). |
 
 ---
 
@@ -170,8 +171,9 @@ Configuration can be supplied via environment variables or a `.env` file:
 | `WISE_MCP_PROFILE_ID` | Integer | `None` | Default profile ID. If omitted and the token has exactly one profile, it is selected automatically. |
 | `WISE_MCP_SCA_PRIVATE_KEY_PEM` | String | *(Keyring)* | RSA-2048 private key in PEM format for SCA digital signing. |
 | `WISE_MCP_SCA_PRIVATE_KEY_PATH` | Path | `None` | Path to private key `.pem` file on disk. |
-| `WISE_MCP_ENABLE_WRITE_TOOLS` | Boolean | `false` | **Lock 1**: Enable write operations (`create_quote`, `create_recipient`, `stage_transfer`, `fund_transfer`). |
+| `WISE_MCP_ENABLE_WRITE_TOOLS` | Boolean | `false` | **Lock 1**: Enable write operations (`create_quote`, `create_recipient`, `stage_transfer`, `cancel_transfer`, `fund_transfer`). |
 | `WISE_MCP_REQUIRE_BIOMETRIC` | Boolean | `true` | **Lock 3**: Require native Touch ID / Windows Hello verification for write actions. |
+| `WISE_MCP_BIOMETRIC_TTL_SECONDS` | Integer | `300` | In-memory approval window (default: 5 min) across batch write operations (0 = prompt every call). `fund_transfer` always requires fresh verification. |
 | `WISE_MCP_KEYRING_SERVICE` | String | `wise_mcp` | OS Keyring service identifier name. |
 | `WISE_MCP_LOG_LEVEL` | String | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `WISE_MCP_ALLOW_CUSTOM_API_URL`| Boolean | `false` | Bypass host whitelist strictly for test mock servers. |

@@ -149,6 +149,29 @@ class StageTransferTool(BaseTool):
         return transfer.model_dump()
 
 
+class CancelTransferInput(ToolSchema):
+    """Input schema for cancel_transfer tool."""
+
+    transfer_id: int = Field(description="Unique transfer ID to cancel")
+
+
+class CancelTransferTool(BaseTool):
+    """Cancel an existing pending/unfunded transfer in Wise."""
+
+    name = "cancel_transfer"
+    description = (
+        "Cancel an existing pending or unfunded transfer in Wise (e.g. in 'incoming_payment_waiting' status) "
+        "before it is funded or processed."
+    )
+    input_schema = CancelTransferInput
+
+    async def execute(
+        self, client: "WiseClient", arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        transfer = await client.cancel_transfer(arguments["transfer_id"])
+        return transfer.model_dump()
+
+
 class FundTransferInput(ToolSchema):
     """Input schema for fund_transfer tool."""
 

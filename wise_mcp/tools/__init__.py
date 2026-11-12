@@ -13,6 +13,7 @@ from wise_mcp.tools.rates import GetExchangeRateTool
 from wise_mcp.tools.recipients import CreateRecipientTool, ListRecipientsTool
 from wise_mcp.tools.statements import GetBalanceStatementTool
 from wise_mcp.tools.transfers import (
+    CancelTransferTool,
     FundTransferTool,
     GetTransferTool,
     ListTransfersTool,
@@ -32,15 +33,17 @@ def register_all_tools(registry: ToolRegistry) -> None:
     registry.register(ListTransfersTool())
     registry.register(GetTransferTool())
 
-    # Write Tools (4 tools)
+    # Write Tools (5 tools)
     registry.register(CreateQuoteTool())
     registry.register(CreateRecipientTool())
     registry.register(StageTransferTool())
+    registry.register(CancelTransferTool())
     registry.register(FundTransferTool())
 
 
 __all__ = [
     "BaseTool",
+    "CancelTransferTool",
     "CreateQuoteTool",
     "CreateRecipientTool",
     "DESTRUCTIVE_TOOL_NAMES",
