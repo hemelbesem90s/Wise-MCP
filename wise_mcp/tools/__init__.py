@@ -1,6 +1,7 @@
 """MCP tools for Wise operations."""
 
-from wise_mcp.tools.balances import ListBalancesTool
+from wise_mcp.tools.activities import ListActivitiesTool
+from wise_mcp.tools.balances import ListBalancesTool, MoveBalanceTool
 from wise_mcp.tools.base import BaseTool, ToolRegistry
 from wise_mcp.tools.constants import (
     DESTRUCTIVE_TOOL_NAMES,
@@ -23,9 +24,10 @@ from wise_mcp.tools.transfers import (
 
 def register_all_tools(registry: ToolRegistry) -> None:
     """Register all available tools with the registry."""
-    # Read Tools (8 tools)
+    # Read Tools (9 tools)
     registry.register(ListProfilesTool())
     registry.register(ListBalancesTool())
+    registry.register(ListActivitiesTool())
     registry.register(GetExchangeRateTool())
     registry.register(GetQuoteTool())
     registry.register(GetBalanceStatementTool())
@@ -33,9 +35,10 @@ def register_all_tools(registry: ToolRegistry) -> None:
     registry.register(ListTransfersTool())
     registry.register(GetTransferTool())
 
-    # Write Tools (5 tools)
+    # Write Tools (6 tools)
     registry.register(CreateQuoteTool())
     registry.register(CreateRecipientTool())
+    registry.register(MoveBalanceTool())
     registry.register(StageTransferTool())
     registry.register(CancelTransferTool())
     registry.register(FundTransferTool())
@@ -52,10 +55,12 @@ __all__ = [
     "GetExchangeRateTool",
     "GetQuoteTool",
     "GetTransferTool",
+    "ListActivitiesTool",
     "ListBalancesTool",
     "ListProfilesTool",
     "ListRecipientsTool",
     "ListTransfersTool",
+    "MoveBalanceTool",
     "READ_TOOL_NAMES",
     "StageTransferTool",
     "ToolRegistry",

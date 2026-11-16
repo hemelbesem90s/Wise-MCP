@@ -80,7 +80,27 @@ def format_write_prompt(tool_name: str, arguments: dict[str, Any]) -> str:
         name = args.get("account_holder_name") or "[Name]"
         curr = args.get("currency") or "[Currency]"
         acct_type = args.get("type") or "account"
-        return f"Wise MCP: Approve registering recipient '{name}' ({curr}, {acct_type})?"
+        return (
+            f"Wise MCP: Approve registering recipient '{name}' ({curr}, {acct_type})?"
+        )
+
+    if tool_name == "move_balance":
+        source = args.get("source_balance_id") or "[Source]"
+        target = args.get("target_balance_id") or "[Target]"
+        amount = _format_currency(args.get("amount"))
+        curr = args.get("currency", "")
+        quote = args.get("quote_id")
+        if amount and curr:
+            return (
+                f"Wise MCP: Approve balance movement of {amount} {curr} "
+                f"from balance {source} to balance {target}?"
+            )
+        if quote:
+            return (
+                f"Wise MCP: Approve balance movement with quote '{quote}' "
+                f"from balance {source} to balance {target}?"
+            )
+        return f"Wise MCP: Approve balance movement from balance {source} to balance {target}?"
 
     if tool_name == "stage_transfer":
         quote = args.get("quote_uuid") or "[Quote]"

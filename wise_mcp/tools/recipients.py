@@ -60,7 +60,9 @@ class CreateRecipientInput(ToolSchema):
     account_holder_name: str = Field(
         description="Full legal name of beneficiary person or company"
     )
-    currency: str = Field(description="3-letter target currency (e.g. EUR, ZAR, GBP, USD)")
+    currency: str = Field(
+        description="3-letter target currency (e.g. EUR, ZAR, GBP, USD)"
+    )
     type: str = Field(
         description="Recipient account routing type (e.g. 'iban' for SEPA EUR/GBP, 'sort_code' for UK, 'south_africa', 'aba')"
     )

@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -18,7 +19,11 @@ from pydantic import ValidationError
 
 from wise import WiseClient, WiseConfig
 from wise.exceptions import WiseError
-from wise.sca import generate_rsa_keypair
+from wise.sca import (
+    generate_rsa_keypair,
+    get_public_key_fingerprint,
+    get_public_key_pem,
+)
 from wise_mcp.biometric_guard import (
     BiometricHardwareUnavailable,
     BiometricVerificationDenied,
@@ -27,6 +32,7 @@ from wise_mcp.biometric_guard import (
 )
 from wise_mcp.config import (
     MCPConfig,
+    get_keyring_secret,
     migrate_macos_keychain_acl,
     set_keyring_secret,
 )
@@ -342,12 +348,78 @@ def main() -> None:
             "the private key in OS keyring (or specified file path)."
         ),
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    parser.add_argument(
+        "--show-public-key",
+        action="store_true",
+        help=(
+            "Derive and display the RSA public key and SHA-256 fingerprint from the configured "
+            "SCA private key without regenerating or modifying credentials."
+        ),
+    )
+    parser.add_argument("--version", action="version", version="%(prog)s 0.2.0")
     args = parser.parse_args()
 
     if args.set_token:
         set_keyring_secret("wise_mcp", "api_token", args.set_token)
         print("Successfully stored api_token in OS keyring under service 'wise_mcp'.")
+        return
+
+    if args.show_public_key:
+        priv_pem = os.environ.get("WISE_MCP_SCA_PRIVATE_KEY_PEM") or get_keyring_secret(
+            "wise_mcp", "sca_private_key_pem"
+        )
+        if not priv_pem and os.environ.get("WISE_MCP_SCA_PRIVATE_KEY_PATH"):
+            p = Path(os.environ["WISE_MCP_SCA_PRIVATE_KEY_PATH"]).expanduser().resolve()
+            if p.is_file():
+                try:
+                    priv_pem = p.read_text(encoding="utf-8")
+                except OSError:
+                    pass
+
+        if not priv_pem:
+            env_file = Path(".env")
+            if env_file.is_file():
+                try:
+                    from dotenv import dotenv_values
+
+                    env_vals = dotenv_values(env_file)
+                    priv_pem = env_vals.get("WISE_MCP_SCA_PRIVATE_KEY_PEM")
+                    if not priv_pem and env_vals.get("WISE_MCP_SCA_PRIVATE_KEY_PATH"):
+                        ep = (
+                            Path(str(env_vals["WISE_MCP_SCA_PRIVATE_KEY_PATH"]))
+                            .expanduser()
+                            .resolve()
+                        )
+                        if ep.is_file():
+                            priv_pem = ep.read_text(encoding="utf-8")
+                except Exception:  # nosec B110
+                    pass
+
+        if not priv_pem or not priv_pem.strip():
+            print(
+                "Error: No RSA private key found in OS keyring or environment.\n"
+                "Run 'wise-mcp --generate-sca-keys' to generate a keypair.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+        try:
+            pub_pem = get_public_key_pem(priv_pem)
+            fingerprint = get_public_key_fingerprint(pub_pem)
+        except Exception as exc:
+            print(f"Error deriving public key: {exc}", file=sys.stderr)
+            raise SystemExit(1) from None
+
+        print("\n" + "=" * 70)
+        print("PUBLIC KEY FOR WISE API STRONG CUSTOMER AUTHENTICATION (SCA)")
+        print("=" * 70)
+        print(f"SHA-256 Fingerprint:\n  {fingerprint}\n")
+        print("Verify or upload this public key in Wise Business:")
+        print(
+            "Wise Console -> Settings -> API tokens -> Manage 2FA keys -> Upload Public Key\n"
+        )
+        print(pub_pem.strip())
+        print("=" * 70 + "\n")
         return
 
     if args.generate_sca_keys is not None:
@@ -366,13 +438,17 @@ def main() -> None:
             print(f"RSA Private Key successfully written to: {p}")
         else:
             set_keyring_secret("wise_mcp", "sca_private_key_pem", priv_pem)
-            print("RSA Private Key securely stored in OS keyring under service 'wise_mcp' (account: sca_private_key_pem).")
+            print(
+                "RSA Private Key securely stored in OS keyring under service 'wise_mcp' (account: sca_private_key_pem)."
+            )
 
         print("\n" + "=" * 70)
         print("PUBLIC KEY FOR WISE API STRONG CUSTOMER AUTHENTICATION (SCA)")
         print("=" * 70)
         print("Copy the public key below and paste it in Wise Business:")
-        print("Wise Console -> Settings -> API tokens -> Manage 2FA keys -> Upload Public Key\n")
+        print(
+            "Wise Console -> Settings -> API tokens -> Manage 2FA keys -> Upload Public Key\n"
+        )
         print(pub_pem.strip())
         print("=" * 70 + "\n")
         return
@@ -416,7 +492,9 @@ def main() -> None:
         mode = "write-enabled" if config.enable_write_tools else "read-only"
         has_sca = bool(config.sca_private_key_pem or config.sca_private_key_path)
         sca_status = "configured" if has_sca else "not configured"
-        print(f"Configuration valid ({mode}; SCA signing {sca_status}; credentials redacted).")
+        print(
+            f"Configuration valid ({mode}; SCA signing {sca_status}; credentials redacted)."
+        )
         return
 
     logging.basicConfig(level=getattr(logging, config.log_level), stream=sys.stderr)

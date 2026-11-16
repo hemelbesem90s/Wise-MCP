@@ -8,7 +8,13 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from wise.exceptions import SCARequiredError, ValidationError
-from wise.sca import generate_rsa_keypair, load_private_key, sign_one_time_token
+from wise.sca import (
+    generate_rsa_keypair,
+    get_public_key_fingerprint,
+    get_public_key_pem,
+    load_private_key,
+    sign_one_time_token,
+)
 
 
 def test_generate_rsa_keypair() -> None:
@@ -57,3 +63,17 @@ def test_sign_invalid_pem_raises() -> None:
 def test_load_private_key_invalid() -> None:
     with pytest.raises(ValidationError, match="Invalid RSA private key"):
         load_private_key("garbage")
+
+
+def test_get_public_key_pem_and_fingerprint(rsa_keypair: tuple[str, str]) -> None:
+    priv_pem, pub_pem = rsa_keypair
+    derived_pub_pem = get_public_key_pem(priv_pem)
+    assert "-----BEGIN PUBLIC KEY-----" in derived_pub_pem
+    assert "-----END PUBLIC KEY-----" in derived_pub_pem
+
+    # Fingerprint from private key PEM
+    fp1 = get_public_key_fingerprint(priv_pem)
+    # Fingerprint from public key PEM
+    fp2 = get_public_key_fingerprint(derived_pub_pem)
+    assert fp1 == fp2
+    assert len(fp1.split(":")) == 32

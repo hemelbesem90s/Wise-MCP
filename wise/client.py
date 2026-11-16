@@ -21,7 +21,8 @@ from wise.exceptions import (
     ValidationError,
     WiseError,
 )
-from wise.models.balance import Balance
+from wise.models.activity import ActivityResponse
+from wise.models.balance import Balance, BalanceMovement
 from wise.models.payment import PaymentResponse
 from wise.models.profile import Profile
 from wise.models.quote import Quote
@@ -66,7 +67,8 @@ class WiseClient:
             )
             secret_pem = (
                 sca_private_key_pem
-                if isinstance(sca_private_key_pem, SecretStr) or sca_private_key_pem is None
+                if isinstance(sca_private_key_pem, SecretStr)
+                or sca_private_key_pem is None
                 else SecretStr(sca_private_key_pem)
             )
             self.config = WiseConfig(
@@ -142,9 +144,11 @@ class WiseClient:
         )
 
         # Handle EEA PSD2 Strong Customer Authentication (SCA) 403 Challenge
+        sca_attempted = False
         if response.status_code == 403 and sign_sca_on_403:
             one_time_token = response.headers.get("x-2fa-approval")
             if one_time_token:
+                sca_attempted = True
                 logger.info(
                     "SCA 2FA challenge detected (x-2fa-approval). Initiating RSA digital signing."
                 )
@@ -167,7 +171,9 @@ class WiseClient:
                 retry_headers["x-2fa-approval"] = one_time_token
                 retry_headers["X-Signature"] = signature
 
-                logger.debug("Retrying request with x-2fa-approval and X-Signature headers.")
+                logger.debug(
+                    "Retrying request with x-2fa-approval and X-Signature headers."
+                )
                 response = await self._http.request(
                     method=method,
                     url=url,
@@ -199,8 +205,7 @@ class WiseClient:
                     or error_details.get("message")
                     or error_details.get("error")
                     or (
-                        error_details.get("errors")
-                        and str(error_details.get("errors"))
+                        error_details.get("errors") and str(error_details.get("errors"))
                     )
                     or error_message
                 )
@@ -215,11 +220,36 @@ class WiseClient:
             )
         if status_code == 403:
             ott = response.headers.get("x-2fa-approval")
+            approval_result = response.headers.get("x-2fa-approval-result")
             if ott:
                 raise SCARequiredError(
                     error_message,
                     one_time_token=ott,
-                    approval_result=response.headers.get("x-2fa-approval-result"),
+                    approval_result=approval_result,
+                    details=error_details,
+                )
+            if approval_result == "REJECTED" or sca_attempted:
+                fp_info = ""
+                try:
+                    pk_pem = self.config.resolve_sca_private_key()
+                    if pk_pem:
+                        from wise.sca import get_public_key_fingerprint
+
+                        fp = get_public_key_fingerprint(pk_pem)
+                        fp_info = f" (Active public key SHA-256 fingerprint: {fp})"
+                except Exception:  # nosec B110
+                    pass
+
+                diagnostic_msg = (
+                    f"Strong Customer Authentication (SCA) challenge failed or was rejected by Wise (x-2fa-approval-result: REJECTED){fp_info}. "
+                    "Ensure the active RSA public key is registered in Wise Business -> Settings -> API tokens -> Manage 2FA keys. "
+                    "Run 'wise-mcp --show-public-key' to inspect the exact public key and fingerprint. "
+                    "Note: Wise personal profile tokens in EEA/UK do not permit statement downloads via API; "
+                    "use 'list_activities' as an SCA-free alternative for recent transactions."
+                )
+                raise SCARequiredError(
+                    diagnostic_msg,
+                    approval_result=approval_result or "REJECTED",
                     details=error_details,
                 )
             raise ForbiddenError(
@@ -238,9 +268,7 @@ class WiseClient:
                 error_message, status_code=status_code, details=error_details
             )
 
-        raise WiseError(
-            error_message, status_code=status_code, details=error_details
-        )
+        raise WiseError(error_message, status_code=status_code, details=error_details)
 
     # -------------------------------------------------------------------------
     # Profiles API
@@ -256,6 +284,58 @@ class WiseClient:
         """Get details for a specific Wise profile."""
         data = await self.request("GET", f"/v1/profiles/{profile_id}")
         return Profile.model_validate(data)
+
+    # -------------------------------------------------------------------------
+    # Activities API
+    # -------------------------------------------------------------------------
+    async def list_activities(
+        self,
+        profile_id: int,
+        *,
+        monetary_resource_type: str | None = None,
+        status: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        size: int = 50,
+        next_cursor: str | None = None,
+    ) -> ActivityResponse:
+        """Fetch profile activity feed without requiring PSD2 SCA.
+
+        Returns all activity types including INTERBALANCE (jar transfers),
+        CARD_PAYMENT, TRANSFER, BALANCE_CASHBACK, and BALANCE_ASSET_FEE.
+
+        Args:
+            profile_id: Profile ID to fetch activities for.
+            monetary_resource_type: Filter by resource type (e.g. CARD_TRANSACTION, TRANSFER).
+            status: Filter by status (e.g. COMPLETED, CANCELLED, PENDING).
+            since: ISO-8601 timestamp string for activity creation start.
+            until: ISO-8601 timestamp string for activity creation end.
+            size: Number of items per page (1 to 100, default 50).
+            next_cursor: Opaque cursor string for pagination.
+
+        Returns:
+            ActivityResponse containing cursor and parsed activity entries.
+        """
+        params: dict[str, Any] = {
+            "size": min(max(1, size), 100),
+        }
+        if monetary_resource_type:
+            params["monetaryResourceType"] = monetary_resource_type
+        if status:
+            params["status"] = status
+        if since:
+            params["since"] = since
+        if until:
+            params["until"] = until
+        if next_cursor:
+            params["nextCursor"] = next_cursor
+
+        data = await self.request(
+            "GET", f"/v1/profiles/{profile_id}/activities", params=params
+        )
+        if not isinstance(data, dict):
+            data = {"activities": data if isinstance(data, list) else []}
+        return ActivityResponse.model_validate(data)
 
     # -------------------------------------------------------------------------
     # Balances API
@@ -283,6 +363,78 @@ class WiseClient:
             "GET", f"/v4/profiles/{profile_id}/balances/{balance_id}"
         )
         return Balance.model_validate(data)
+
+    async def move_balance(
+        self,
+        profile_id: int,
+        *,
+        source_balance_id: int,
+        target_balance_id: int,
+        amount: float | None = None,
+        currency: str | None = None,
+        quote_id: str | int | None = None,
+        idempotency_uuid: str | None = None,
+    ) -> BalanceMovement:
+        """Move funds between balances or savings jars (STANDARD <-> SAVINGS).
+
+        Can be used for:
+        1. Same-currency balance <-> jar movements: specify amount and currency.
+        2. Cross-currency conversions: specify quote_id (created with payOut: "BALANCE").
+
+        Args:
+            profile_id: Wise profile ID.
+            source_balance_id: ID of the source balance or jar.
+            target_balance_id: ID of the target balance or jar.
+            amount: Numerical amount to move (same-currency movements).
+            currency: 3-letter currency code (same-currency movements).
+            quote_id: Locked quote ID/UUID (cross-currency conversions).
+            idempotency_uuid: Optional UUID for idempotency.
+
+        Returns:
+            BalanceMovement representing the executed movement.
+        """
+        if source_balance_id == target_balance_id:
+            raise ValidationError("Source and target balance IDs must be different.")
+
+        has_amount = amount is not None
+        has_quote = quote_id is not None
+
+        if (has_amount and has_quote) or (not has_amount and not has_quote):
+            raise ValidationError(
+                "Exactly one of ('amount' and 'currency') OR 'quote_id' must be specified."
+            )
+
+        payload: dict[str, Any] = {
+            "sourceBalanceId": source_balance_id,
+            "targetBalanceId": target_balance_id,
+        }
+
+        if has_amount:
+            if amount <= 0:  # type: ignore[operator]
+                raise ValidationError("Amount must be greater than 0.")
+            if not currency or not currency.strip():
+                raise ValidationError(
+                    "Currency must be specified when amount is provided."
+                )
+            payload["amount"] = {
+                "value": float(amount),  # type: ignore[arg-type]
+                "currency": currency.strip().upper(),
+            }
+        else:
+            payload["quoteId"] = quote_id
+
+        headers = {
+            "X-idempotence-uuid": idempotency_uuid or str(uuid.uuid4()),
+        }
+
+        data = await self.request(
+            "POST",
+            f"/v2/profiles/{profile_id}/balance-movements",
+            json=payload,
+            headers=headers,
+            sign_sca_on_403=True,
+        )
+        return BalanceMovement.model_validate(data)
 
     # -------------------------------------------------------------------------
     # Exchange Rates API
@@ -369,9 +521,7 @@ class WiseClient:
 
     async def get_quote(self, profile_id: int, quote_id: str | int) -> Quote:
         """Inspect an existing FX quote by ID or UUID."""
-        data = await self.request(
-            "GET", f"/v3/profiles/{profile_id}/quotes/{quote_id}"
-        )
+        data = await self.request("GET", f"/v3/profiles/{profile_id}/quotes/{quote_id}")
         return Quote.model_validate(data)
 
     # -------------------------------------------------------------------------
@@ -396,7 +546,9 @@ class WiseClient:
         else:
             ext = clean_ext
 
-        path = f"/v1/profiles/{profile_id}/balance-statements/{balance_id}/statement.{ext}"
+        path = (
+            f"/v1/profiles/{profile_id}/balance-statements/{balance_id}/statement.{ext}"
+        )
         params = {
             "currency": currency.upper(),
             "intervalStart": interval_start,

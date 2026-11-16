@@ -12,7 +12,9 @@ class Transfer(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: int = Field(description="Unique transfer ID")
-    profile: int | None = Field(default=None, description="Profile ID executing transfer")
+    profile: int | None = Field(
+        default=None, description="Profile ID executing transfer"
+    )
     targetAccount: int = Field(description="Recipient account ID")
     quoteUuid: str | None = Field(default=None, description="Locked quote UUID")
     status: str = Field(
@@ -22,10 +24,13 @@ class Transfer(BaseModel):
         )
     )
     reference: str | None = Field(
-        default=None, description="Payment reference string shown on recipient statement"
+        default=None,
+        description="Payment reference string shown on recipient statement",
     )
     rate: float | None = Field(default=None, description="Applied FX rate")
-    created: str | None = Field(default=None, description="Creation timestamp (ISO 8601)")
+    created: str | None = Field(
+        default=None, description="Creation timestamp (ISO 8601)"
+    )
     sourceValue: float | None = Field(
         default=None, description="Total amount sent in source currency"
     )

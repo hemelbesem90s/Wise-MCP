@@ -53,8 +53,12 @@ class GetQuoteTool(BaseTool):
 class CreateQuoteInput(ToolSchema):
     """Input schema for create_quote tool."""
 
-    source_currency: str = Field(description="3-letter source currency to send (e.g. EUR)")
-    target_currency: str = Field(description="3-letter target currency to receive (e.g. ZAR)")
+    source_currency: str = Field(
+        description="3-letter source currency to send (e.g. EUR)"
+    )
+    target_currency: str = Field(
+        description="3-letter target currency to receive (e.g. ZAR)"
+    )
     source_amount: float | None = Field(
         default=None,
         gt=0,

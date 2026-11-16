@@ -19,7 +19,9 @@ class Profile(BaseModel):
         default_factory=dict,
         description="Profile details (e.g. name, registration number, address)",
     )
-    fullName: str | None = Field(default=None, description="Personal full name if personal profile")
+    fullName: str | None = Field(
+        default=None, description="Personal full name if personal profile"
+    )
 
     @property
     def display_name(self) -> str:

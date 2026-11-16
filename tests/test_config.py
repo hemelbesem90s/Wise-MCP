@@ -61,7 +61,9 @@ def test_wise_config_resolve_sca_key_from_pem(rsa_keypair: tuple[str, str]) -> N
     assert cfg.resolve_sca_private_key() == priv_pem.strip()
 
 
-def test_wise_config_resolve_sca_key_from_path(tmp_path: Path, rsa_keypair: tuple[str, str]) -> None:
+def test_wise_config_resolve_sca_key_from_path(
+    tmp_path: Path, rsa_keypair: tuple[str, str]
+) -> None:
     priv_pem, _ = rsa_keypair
     pem_file = tmp_path / "private.pem"
     pem_file.write_text(priv_pem)
@@ -85,9 +87,10 @@ def test_keyring_get_and_set() -> None:
 
 
 def test_migrate_macos_keychain_acl() -> None:
-    with patch("keyring.get_password", side_effect=lambda s, a: f"val-{a}"), patch(
-        "wise_mcp.config.set_keyring_secret"
-    ) as mock_set:
+    with (
+        patch("keyring.get_password", side_effect=lambda s, a: f"val-{a}"),
+        patch("wise_mcp.config.set_keyring_secret") as mock_set,
+    ):
         migrated = migrate_macos_keychain_acl("wise_mcp")
         assert "api_token" in migrated
         assert "sca_private_key_pem" in migrated

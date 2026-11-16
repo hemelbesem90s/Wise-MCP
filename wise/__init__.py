@@ -14,8 +14,11 @@ from wise.exceptions import (
     WiseError,
 )
 from wise.models import (
+    Activity,
+    ActivityResponse,
     Balance,
     BalanceAmount,
+    BalanceMovement,
     BalanceStatement,
     ExchangeRate,
     PaymentResponse,
@@ -24,13 +27,22 @@ from wise.models import (
     Recipient,
     StatementLine,
     Transfer,
+    strip_html_tags,
 )
-from wise.sca import generate_rsa_keypair, sign_one_time_token
+from wise.sca import (
+    generate_rsa_keypair,
+    get_public_key_fingerprint,
+    get_public_key_pem,
+    sign_one_time_token,
+)
 
 __all__ = [
+    "Activity",
+    "ActivityResponse",
     "AuthenticationError",
     "Balance",
     "BalanceAmount",
+    "BalanceMovement",
     "BalanceStatement",
     "ExchangeRate",
     "ForbiddenError",
@@ -50,5 +62,8 @@ __all__ = [
     "WiseConfig",
     "WiseError",
     "generate_rsa_keypair",
+    "get_public_key_fingerprint",
+    "get_public_key_pem",
     "sign_one_time_token",
+    "strip_html_tags",
 ]

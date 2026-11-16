@@ -41,9 +41,7 @@ class BalanceStatement(BaseModel):
     accountHolder: dict[str, Any] | None = Field(
         default=None, description="Account holder profile metadata"
     )
-    balance: dict[str, Any] | None = Field(
-        default=None, description="Balance metadata"
-    )
+    balance: dict[str, Any] | None = Field(default=None, description="Balance metadata")
     query: dict[str, Any] | None = Field(
         default=None, description="Statement query parameters"
     )

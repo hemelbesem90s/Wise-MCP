@@ -14,10 +14,16 @@ class Quote(BaseModel):
     id: Any = Field(description="Unique quote ID or UUID")
     sourceCurrency: str = Field(description="Currency to send")
     targetCurrency: str = Field(description="Currency to receive")
-    sourceAmount: float | None = Field(default=None, description="Amount sent in source currency")
-    targetAmount: float | None = Field(default=None, description="Amount received in target currency")
+    sourceAmount: float | None = Field(
+        default=None, description="Amount sent in source currency"
+    )
+    targetAmount: float | None = Field(
+        default=None, description="Amount received in target currency"
+    )
     rate: float = Field(description="Locked exchange rate")
-    createdTime: str | None = Field(default=None, description="Creation timestamp (ISO 8601)")
+    createdTime: str | None = Field(
+        default=None, description="Creation timestamp (ISO 8601)"
+    )
     rateExpirationTime: str | None = Field(
         default=None, description="Expiration timestamp for guaranteed rate (ISO 8601)"
     )

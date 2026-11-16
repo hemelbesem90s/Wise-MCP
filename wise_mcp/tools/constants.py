@@ -6,6 +6,7 @@ from __future__ import annotations
 READ_TOOL_NAMES: tuple[str, ...] = (
     "list_profiles",
     "list_balances",
+    "list_activities",
     "get_exchange_rate",
     "get_quote",
     "get_balance_statement",
@@ -18,12 +19,11 @@ READ_TOOL_NAMES: tuple[str, ...] = (
 WRITE_TOOL_NAMES: tuple[str, ...] = (
     "create_quote",
     "create_recipient",
+    "move_balance",
     "stage_transfer",
     "cancel_transfer",
     "fund_transfer",
 )
 
 # High-risk financial operations
-DESTRUCTIVE_TOOL_NAMES: tuple[str, ...] = (
-    "fund_transfer",
-)
+DESTRUCTIVE_TOOL_NAMES: tuple[str, ...] = ("fund_transfer",)

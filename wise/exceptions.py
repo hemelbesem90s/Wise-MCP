@@ -36,12 +36,13 @@ class SCARequiredError(WiseError):
         *,
         one_time_token: str | None = None,
         approval_result: str | None = None,
+        status_code: int | None = 403,
         details: Any = None,
     ) -> None:
         super().__init__(
             message,
             code="SCA_REQUIRED",
-            status_code=403,
+            status_code=status_code if status_code is not None else 403,
             details=details,
         )
         self.one_time_token = one_time_token

@@ -14,10 +14,12 @@ from wise_mcp.tools import (
     GetExchangeRateTool,
     GetQuoteTool,
     GetTransferTool,
+    ListActivitiesTool,
     ListBalancesTool,
     ListProfilesTool,
     ListRecipientsTool,
     ListTransfersTool,
+    MoveBalanceTool,
     StageTransferTool,
     ToolRegistry,
     register_all_tools,
@@ -28,8 +30,10 @@ def test_registry_registration() -> None:
     reg = ToolRegistry()
     register_all_tools(reg)
     tools = reg.list_tools()
-    assert len(tools) == 13
+    assert len(tools) == 15
     assert reg.get("list_profiles") is not None
+    assert reg.get("list_activities") is not None
+    assert reg.get("move_balance") is not None
     assert reg.get("stage_transfer") is not None
     assert reg.get("cancel_transfer") is not None
     assert reg.get("fund_transfer") is not None
@@ -74,6 +78,100 @@ async def test_list_balances_missing_profile_raises() -> None:
 
 
 @pytest.mark.asyncio
+async def test_move_balance_tool() -> None:
+    tool = MoveBalanceTool()
+    client = AsyncMock()
+    client.config.profile_id = 12345
+    client.move_balance.return_value = MagicMock(
+        model_dump=lambda: {
+            "id": "mov-123",
+            "state": "COMPLETED",
+            "sourceBalanceId": 1,
+            "targetBalanceId": 2,
+        }
+    )
+
+    res = await tool.execute(
+        client,
+        {
+            "source_balance_id": 1,
+            "target_balance_id": 2,
+            "amount": 500.0,
+            "currency": "EUR",
+        },
+    )
+    assert res["id"] == "mov-123"
+    assert res["state"] == "COMPLETED"
+    client.move_balance.assert_called_with(
+        12345,
+        source_balance_id=1,
+        target_balance_id=2,
+        amount=500.0,
+        currency="EUR",
+        quote_id=None,
+        idempotency_uuid=None,
+    )
+
+    # Auto-select profile when profile_id is None
+    client.config.profile_id = None
+    client.list_profiles.return_value = [MagicMock(id=54321)]
+    res2 = await tool.execute(
+        client,
+        {
+            "source_balance_id": 1,
+            "target_balance_id": 2,
+            "quote_id": "quote-abc",
+        },
+    )
+    assert res2["id"] == "mov-123"
+
+    # Missing profile raises
+    client.list_profiles.return_value = [MagicMock(id=1), MagicMock(id=2)]
+    with pytest.raises(ValueError, match="profile_id is required"):
+        await tool.execute(
+            client,
+            {
+                "source_balance_id": 1,
+                "target_balance_id": 2,
+                "amount": 10.0,
+                "currency": "EUR",
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_list_activities_tool() -> None:
+    tool = ListActivitiesTool()
+    client = AsyncMock()
+    client.config.profile_id = 12345
+    mock_resp = MagicMock()
+    mock_resp.cursor = "next-cur"
+    mock_resp.activities = [
+        MagicMock(
+            model_dump=lambda: {
+                "id": "act-1",
+                "type": "INTERBALANCE",
+                "title": "To <strong>VAT Jar</strong>",
+                "title_text": "To VAT Jar",
+            }
+        )
+    ]
+    client.list_activities.return_value = mock_resp
+
+    res = await tool.execute(client, {"size": 25})
+    assert res["profile_id"] == 12345
+    assert res["cursor"] == "next-cur"
+    assert res["count"] == 1
+    assert res["activities"][0]["title_text"] == "To VAT Jar"
+
+    # Missing profile raises
+    client.config.profile_id = None
+    client.list_profiles.return_value = [MagicMock(id=1), MagicMock(id=2)]
+    with pytest.raises(ValueError, match="profile_id is required"):
+        await tool.execute(client, {})
+
+
+@pytest.mark.asyncio
 async def test_rates_tool() -> None:
     tool = GetExchangeRateTool()
     client = AsyncMock()
@@ -92,8 +190,12 @@ async def test_quote_tools() -> None:
     client = AsyncMock()
     client.config.profile_id = None
     client.list_profiles.return_value = [MagicMock(id=111)]
-    client.get_quote.return_value = MagicMock(model_dump=lambda: {"id": "q-1", "rate": 20.0})
-    client.create_quote.return_value = MagicMock(model_dump=lambda: {"id": "q-2", "rate": 20.0})
+    client.get_quote.return_value = MagicMock(
+        model_dump=lambda: {"id": "q-1", "rate": 20.0}
+    )
+    client.create_quote.return_value = MagicMock(
+        model_dump=lambda: {"id": "q-2", "rate": 20.0}
+    )
 
     # Auto profile select in get_quote
     res_get = await get_tool.execute(client, {"quote_id": "q-1"})
@@ -123,7 +225,11 @@ async def test_quote_tools() -> None:
     with pytest.raises(ValueError, match="profile_id is required"):
         await create_tool.execute(
             client,
-            {"source_currency": "EUR", "target_currency": "ZAR", "source_amount": 500.0},
+            {
+                "source_currency": "EUR",
+                "target_currency": "ZAR",
+                "source_amount": 500.0,
+            },
         )
 
 
@@ -193,7 +299,9 @@ async def test_recipients_tools() -> None:
     client.config.profile_id = None
     client.list_profiles.return_value = [MagicMock(id=777)]
     client.list_recipients.return_value = [MagicMock(model_dump=lambda: {"id": 1})]
-    client.create_recipient.return_value = MagicMock(model_dump=lambda: {"id": 2, "accountHolderName": "Test"})
+    client.create_recipient.return_value = MagicMock(
+        model_dump=lambda: {"id": 2, "accountHolderName": "Test"}
+    )
 
     res_list = await list_tool.execute(client, {"currency": "EUR"})
     assert res_list["count"] == 1
@@ -234,10 +342,18 @@ async def test_transfers_tools_execution() -> None:
     client = AsyncMock()
     client.config.profile_id = 12345
     client.list_transfers.return_value = [MagicMock(model_dump=lambda: {"id": 11})]
-    client.get_transfer.return_value = MagicMock(model_dump=lambda: {"id": 11, "status": "processing"})
-    client.stage_transfer.return_value = MagicMock(model_dump=lambda: {"id": 12, "status": "incoming_payment_waiting"})
-    client.cancel_transfer.return_value = MagicMock(model_dump=lambda: {"id": 12, "status": "cancelled"})
-    client.fund_transfer.return_value = MagicMock(model_dump=lambda: {"status": "COMPLETED"})
+    client.get_transfer.return_value = MagicMock(
+        model_dump=lambda: {"id": 11, "status": "processing"}
+    )
+    client.stage_transfer.return_value = MagicMock(
+        model_dump=lambda: {"id": 12, "status": "incoming_payment_waiting"}
+    )
+    client.cancel_transfer.return_value = MagicMock(
+        model_dump=lambda: {"id": 12, "status": "cancelled"}
+    )
+    client.fund_transfer.return_value = MagicMock(
+        model_dump=lambda: {"status": "COMPLETED"}
+    )
 
     res_list = await list_tool.execute(client, {})
     assert res_list["count"] == 1

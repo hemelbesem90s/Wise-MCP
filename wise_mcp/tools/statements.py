@@ -16,7 +16,9 @@ class GetBalanceStatementInput(ToolSchema):
     """Input schema for get_balance_statement tool."""
 
     balance_id: int = Field(description="Unique balance ID to fetch statement for")
-    currency: str = Field(description="3-letter currency code of balance (e.g. EUR, ZAR, USD)")
+    currency: str = Field(
+        description="3-letter currency code of balance (e.g. EUR, ZAR, USD)"
+    )
     interval_start: str = Field(
         description="Statement period start in UTC ISO 8601 (e.g. '2026-01-01T00:00:00.000Z')"
     )

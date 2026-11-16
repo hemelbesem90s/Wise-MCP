@@ -23,7 +23,7 @@ A secure, vendor-neutral, standalone [Model Context Protocol (MCP)](https://mode
 
 ---
 
-## 🛠️ Tool Catalog (13 Tools)
+## 🛠️ Tool Catalog (15 Tools)
 
 ### Read Tools (Enabled by Default)
 
@@ -31,6 +31,7 @@ A secure, vendor-neutral, standalone [Model Context Protocol (MCP)](https://mode
 | :--- | :--- |
 | `list_profiles` | List all personal and business profiles associated with the API token. Returns `profileId`, account holder name, and business metadata. |
 | `list_balances` | Retrieve real-time multi-currency account balances and savings jars for a profile (`STANDARD` and `SAVINGS` jars). |
+| `list_activities` | Retrieve profile activity feed (interbalance jar movements, card payments, transfers, cashback, and fees) without requiring PSD2 SCA. Returns stripped plain text alongside Wise's inline HTML tags and pagination cursor. |
 | `get_exchange_rate` | Fetch live and historical mid-market foreign exchange rates between any currency pair (e.g., `EUR` $\leftrightarrow$ `ZAR`, `USD`, `GBP`). |
 | `get_quote` | Inspect an existing FX quote by ID or UUID, including guaranteed exchange rate, fee breakdown, and estimated delivery timeline. |
 | `get_balance_statement` | Retrieve official balance statements with automatic EEA PSD2 SCA signing. Supports `json`, `csv`, `xml` (`camt.053`), and `mt940` formats with itemized or flat fee accounting layouts. |
@@ -44,6 +45,7 @@ A secure, vendor-neutral, standalone [Model Context Protocol (MCP)](https://mode
 | :--- | :--- |
 | `create_quote` | Create an authenticated quote locking in the mid-market exchange rate and transfer fee for 30 minutes. Defaults to `pay_in="BALANCE"` (€0 fee for EUR SEPA) and returns `quoteUuid` needed for transfer staging. |
 | `create_recipient` | Register a new beneficiary recipient bank account (supports SEPA IBAN for EUR, UK Sort Code for GBP, South African clearing codes for ZAR, and US ACH for USD). |
+| `move_balance` | Transfer funds internally between Wise balances and savings jars (`STANDARD` $\leftrightarrow$ `SAVINGS`) or convert balance currencies using a locked quote. |
 | `stage_transfer` | Create and queue an unfunded transfer in Wise in `incoming_payment_waiting` state with an invoice reference and client idempotency UUID (`customerTransactionId`). |
 | `cancel_transfer` | Cancel an existing pending or unfunded transfer in Wise before it is funded or processed. |
 | `fund_transfer` | **High-Risk Operation**: Irrevocably fund and execute a pending transfer order from a Wise multi-currency balance (always requires fresh biometric prompt). |
@@ -143,6 +145,12 @@ The CLI prints the **Public Key (`-----BEGIN PUBLIC KEY----- ...`)** to your ter
 1. Log in to [Wise Business](https://wise.com).
 2. Go to **Settings** $\rightarrow$ **API tokens**.
 3. Under **Manage 2FA keys** (or **Add new key**), upload `wise_public.pem` and copy your API token.
+
+To display the public key and SHA-256 fingerprint from an existing private key in Keychain without regenerating keys:
+
+```bash
+wise-mcp --show-public-key
+```
 
 ---
 

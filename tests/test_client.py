@@ -98,7 +98,10 @@ async def test_create_and_get_quote(
             assert body["payIn"] == "BALANCE"
             assert body["preferredPayIn"] == "BALANCE"
             return httpx.Response(200, json=sample_quote)
-        if request.method == "PATCH" and "/quotes/quote-uuid-abc-123" in request.url.path:
+        if (
+            request.method == "PATCH"
+            and "/quotes/quote-uuid-abc-123" in request.url.path
+        ):
             body = json.loads(request.content.decode("utf-8"))
             assert body["payIn"] == "BALANCE"
             return httpx.Response(200, json=sample_quote)
@@ -109,16 +112,16 @@ async def test_create_and_get_quote(
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http:
         client = WiseClient(mock_config, http_client=http)
-        quote = await client.create_quote(
-            12345, "EUR", "ZAR", source_amount=1000.0
-        )
+        quote = await client.create_quote(12345, "EUR", "ZAR", source_amount=1000.0)
         assert quote.id == "quote-uuid-abc-123"
         assert quote.rate == 20.15
 
         fetched = await client.get_quote(12345, "quote-uuid-abc-123")
         assert fetched.id == "quote-uuid-abc-123"
 
-        patched = await client.update_quote(12345, "quote-uuid-abc-123", pay_in="BALANCE")
+        patched = await client.update_quote(
+            12345, "quote-uuid-abc-123", pay_in="BALANCE"
+        )
         assert patched.id == "quote-uuid-abc-123"
 
         # Invalid: both source and target amounts
@@ -288,7 +291,7 @@ async def test_sca_403_challenge_signing_and_transparent_retry(
 
 @pytest.mark.asyncio
 async def test_sca_403_without_private_key_raises(
-    sample_statement: dict[str, Any]
+    sample_statement: dict[str, Any],
 ) -> None:
     """Test that 403 with x-2fa-approval raises SCARequiredError if no key configured."""
     config_no_key = WiseConfig(
@@ -316,8 +319,199 @@ async def test_sca_403_without_private_key_raises(
 
 
 @pytest.mark.asyncio
+async def test_sca_403_post_retry_rejected_raises_actionable_error(
+    mock_config: WiseConfig,
+) -> None:
+    """Test that HTTP 403 REJECTED after SCA retry raises SCARequiredError with diagnostic fingerprint."""
+    call_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(
+                403,
+                headers={
+                    "x-2fa-approval": "ott-challenge-token-777",
+                    "x-2fa-approval-result": "REJECTED",
+                },
+            )
+        # Second attempt: Wise rejects the signature with empty body
+        return httpx.Response(
+            403,
+            headers={"x-2fa-approval-result": "REJECTED"},
+            content=b"",
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = WiseClient(mock_config, http_client=http)
+        with pytest.raises(SCARequiredError) as exc_info:
+            await client.get_balance_statement(
+                12345, 101, "EUR", "2026-01-01T00:00:00Z", "2026-01-31T23:59:59Z"
+            )
+        assert call_count == 2
+        err_msg = str(exc_info.value)
+        assert "x-2fa-approval-result: REJECTED" in err_msg
+        assert "Active public key SHA-256 fingerprint:" in err_msg
+        assert "wise-mcp --show-public-key" in err_msg
+        assert "list_activities" in err_msg
+
+
+@pytest.mark.asyncio
+async def test_move_balance_execution(mock_config: WiseConfig) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert "/v2/profiles/12345/balance-movements" in request.url.path
+        assert "X-idempotence-uuid" in request.headers
+        body = json.loads(request.content.decode("utf-8"))
+        if "amount" in body:
+            assert body["sourceBalanceId"] == 1
+            assert body["targetBalanceId"] == 2
+            assert body["amount"]["value"] == 250.0
+            assert body["amount"]["currency"] == "EUR"
+            return httpx.Response(
+                200,
+                json={
+                    "id": "mov-same-currency-1",
+                    "state": "COMPLETED",
+                    "sourceBalanceId": 1,
+                    "targetBalanceId": 2,
+                    "sourceAmount": {"value": 250.0, "currency": "EUR"},
+                    "targetAmount": {"value": 250.0, "currency": "EUR"},
+                },
+            )
+        if "quoteId" in body:
+            assert body["quoteId"] == "quote-xyz"
+            return httpx.Response(
+                200,
+                json={
+                    "id": "mov-cross-currency-2",
+                    "state": "COMPLETED",
+                    "sourceBalanceId": 1,
+                    "targetBalanceId": 2,
+                    "quoteId": "quote-xyz",
+                },
+            )
+        return httpx.Response(400, json={"error": "Bad Request"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = WiseClient(mock_config, http_client=http)
+
+        # Same currency
+        mov1 = await client.move_balance(
+            12345,
+            source_balance_id=1,
+            target_balance_id=2,
+            amount=250.0,
+            currency="EUR",
+        )
+        assert mov1.id == "mov-same-currency-1"
+        assert mov1.state == "COMPLETED"
+
+        # Cross currency with quote
+        mov2 = await client.move_balance(
+            12345,
+            source_balance_id=1,
+            target_balance_id=2,
+            quote_id="quote-xyz",
+            idempotency_uuid="custom-uuid-1",
+        )
+        assert mov2.id == "mov-cross-currency-2"
+
+        # Validations
+        with pytest.raises(
+            ValidationError, match="Source and target balance IDs must be different"
+        ):
+            await client.move_balance(
+                12345,
+                source_balance_id=1,
+                target_balance_id=1,
+                amount=10.0,
+                currency="EUR",
+            )
+
+        with pytest.raises(ValidationError, match="Exactly one of"):
+            await client.move_balance(12345, source_balance_id=1, target_balance_id=2)
+
+        with pytest.raises(ValidationError, match="Exactly one of"):
+            await client.move_balance(
+                12345,
+                source_balance_id=1,
+                target_balance_id=2,
+                amount=10.0,
+                currency="EUR",
+                quote_id="quote-1",
+            )
+
+        with pytest.raises(ValidationError, match="Amount must be greater than 0"):
+            await client.move_balance(
+                12345,
+                source_balance_id=1,
+                target_balance_id=2,
+                amount=0,
+                currency="EUR",
+            )
+
+        with pytest.raises(ValidationError, match="Currency must be specified"):
+            await client.move_balance(
+                12345,
+                source_balance_id=1,
+                target_balance_id=2,
+                amount=10.0,
+                currency="",
+            )
+
+
+@pytest.mark.asyncio
+async def test_list_activities_execution(mock_config: WiseConfig) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert "/v1/profiles/12345/activities" in request.url.path
+        assert request.url.params.get("size") == "10"
+        assert request.url.params.get("monetaryResourceType") == "INTERBALANCE"
+        return httpx.Response(
+            200,
+            json={
+                "cursor": "cursor-abc-123",
+                "activities": [
+                    {
+                        "id": "act-int-1",
+                        "type": "INTERBALANCE",
+                        "resource": {"type": "BALANCE_TRANSACTION", "id": "1122"},
+                        "title": "To <strong>VAT Jar</strong>",
+                        "description": "<positive>Moved</positive>",
+                        "primaryAmount": "1,000 EUR",
+                        "status": "COMPLETED",
+                        "createdOn": "2026-10-21T14:38:02.178Z",
+                    }
+                ],
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = WiseClient(mock_config, http_client=http)
+        resp = await client.list_activities(
+            12345,
+            monetary_resource_type="INTERBALANCE",
+            size=10,
+        )
+        assert resp.cursor == "cursor-abc-123"
+        assert len(resp.activities) == 1
+        act = resp.activities[0]
+        assert act.id == "act-int-1"
+        assert act.title == "To <strong>VAT Jar</strong>"
+        assert act.title_text == "To VAT Jar"
+        assert act.description_text == "Moved"
+
+
+@pytest.mark.asyncio
 async def test_http_error_mappings(mock_config: WiseConfig) -> None:
-    async def run_error_check(status: int, exc_type: type[Exception], json_body: dict) -> None:
+    async def run_error_check(
+        status: int, exc_type: type[Exception], json_body: dict
+    ) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(status, json=json_body)
 

@@ -35,10 +35,45 @@ def test_format_write_prompt() -> None:
     # create_recipient
     p2 = format_write_prompt(
         "create_recipient",
-        {"account_holder_name": "Apeira (Pty) Ltd", "currency": "ZAR", "type": "south_africa"},
+        {
+            "account_holder_name": "Apeira (Pty) Ltd",
+            "currency": "ZAR",
+            "type": "south_africa",
+        },
     )
     assert "Apeira (Pty) Ltd" in p2
     assert "ZAR" in p2
+
+    # move_balance
+    p_mov_amt = format_write_prompt(
+        "move_balance",
+        {
+            "source_balance_id": 1001,
+            "target_balance_id": 2002,
+            "amount": 2500.0,
+            "currency": "EUR",
+        },
+    )
+    assert "2,500.00 EUR" in p_mov_amt
+    assert "1001" in p_mov_amt
+    assert "2002" in p_mov_amt
+
+    p_mov_quote = format_write_prompt(
+        "move_balance",
+        {
+            "source_balance_id": 1001,
+            "target_balance_id": 2002,
+            "quote_id": "quote-xyz-123",
+        },
+    )
+    assert "quote 'quote-xyz-123'" in p_mov_quote
+    assert "1001" in p_mov_quote
+
+    p_mov_bare = format_write_prompt(
+        "move_balance",
+        {"source_balance_id": 1, "target_balance_id": 2},
+    )
+    assert "from balance 1 to balance 2" in p_mov_bare
 
     # stage_transfer
     p3 = format_write_prompt(
@@ -70,26 +105,29 @@ def test_format_write_prompt() -> None:
 
 
 def test_verify_macos_swift_success() -> None:
-    with patch("shutil.which", return_value="/usr/bin/swift"), patch(
-        "subprocess.run"
-    ) as mock_run:
+    with (
+        patch("shutil.which", return_value="/usr/bin/swift"),
+        patch("subprocess.run") as mock_run,
+    ):
         mock_run.return_value = MagicMock(returncode=0)
         assert verify_macos("Approve payment?") is True
 
 
 def test_verify_macos_swift_denied() -> None:
-    with patch("shutil.which", return_value="/usr/bin/swift"), patch(
-        "subprocess.run"
-    ) as mock_run:
+    with (
+        patch("shutil.which", return_value="/usr/bin/swift"),
+        patch("subprocess.run") as mock_run,
+    ):
         mock_run.return_value = MagicMock(returncode=1)
         with pytest.raises(BiometricVerificationDenied):
             verify_macos("Approve payment?")
 
 
 def test_verify_macos_fallback_osascript() -> None:
-    with patch("shutil.which", return_value="/usr/bin/swift"), patch(
-        "subprocess.run"
-    ) as mock_run:
+    with (
+        patch("shutil.which", return_value="/usr/bin/swift"),
+        patch("subprocess.run") as mock_run,
+    ):
         # swift fails policy evaluation (code 2), falls back to osascript dialog (code 0)
         mock_run.side_effect = [
             MagicMock(returncode=2),
@@ -131,8 +169,9 @@ def test_verify_user_presence_ttl_caching() -> None:
         call_count += 1
         return True
 
-    with patch("sys.platform", "darwin"), patch(
-        "wise_mcp.biometric_guard.verify_macos", side_effect=mock_verify_macos
+    with (
+        patch("sys.platform", "darwin"),
+        patch("wise_mcp.biometric_guard.verify_macos", side_effect=mock_verify_macos),
     ):
         # First call with ttl=300 -> prompts OS and populates cache
         res1 = verify_user_presence("Approve #1", ttl_seconds=300)

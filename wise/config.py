@@ -62,7 +62,9 @@ class WiseConfig(BaseModel):
         if parsed.scheme != "https" or not parsed.hostname:
             raise HostSecurityError("api_url must be an absolute HTTPS URL")
         if parsed.username or parsed.password:
-            raise HostSecurityError("api_url must not contain embedded user credentials")
+            raise HostSecurityError(
+                "api_url must not contain embedded user credentials"
+            )
 
         hostname = parsed.hostname.lower()
         if not self.allow_custom_api_url and hostname not in OFFICIAL_API_HOSTS:
@@ -89,7 +91,10 @@ class WiseConfig(BaseModel):
             if val:
                 return val
 
-        if self.sca_private_key_path is not None and self.sca_private_key_path.is_file():
+        if (
+            self.sca_private_key_path is not None
+            and self.sca_private_key_path.is_file()
+        ):
             try:
                 content = self.sca_private_key_path.read_text(encoding="utf-8").strip()
                 if content:

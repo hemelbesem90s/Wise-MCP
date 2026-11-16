@@ -101,12 +101,8 @@ class GetTransferTool(BaseTool):
 class StageTransferInput(ToolSchema):
     """Input schema for stage_transfer tool."""
 
-    target_account_id: int = Field(
-        description="Recipient account ID to receive funds"
-    )
-    quote_uuid: str = Field(
-        description="Locked quote UUID created via create_quote"
-    )
+    target_account_id: int = Field(description="Recipient account ID to receive funds")
+    quote_uuid: str = Field(description="Locked quote UUID created via create_quote")
     reference: str = Field(
         description="Payment reference text appearing on recipient bank statement (e.g. invoice number)"
     )
@@ -175,9 +171,7 @@ class CancelTransferTool(BaseTool):
 class FundTransferInput(ToolSchema):
     """Input schema for fund_transfer tool."""
 
-    transfer_id: int = Field(
-        description="Transfer ID to fund from Wise balance"
-    )
+    transfer_id: int = Field(description="Transfer ID to fund from Wise balance")
     balance_id: int | None = Field(
         default=None,
         description="Optional source balance ID matching the source currency",

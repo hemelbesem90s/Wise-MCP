@@ -90,7 +90,11 @@ async def test_server_call_write_tool_when_disabled_fails(
         CallToolRequest(
             params=CallToolRequestParams(
                 name="create_quote",
-                arguments={"source_currency": "EUR", "target_currency": "ZAR", "source_amount": 100},
+                arguments={
+                    "source_currency": "EUR",
+                    "target_currency": "ZAR",
+                    "source_amount": 100,
+                },
             )
         )
     )
@@ -165,9 +169,10 @@ async def test_server_call_write_tool_success(
     mock_client.config.profile_id = 12345
     mock_client.create_quote.return_value = MagicMock(model_dump=lambda: sample_quote)
 
-    with patch.object(WiseMCPServer, "get_client") as mock_get_client, patch(
-        "wise_mcp.server.verify_user_presence"
-    ) as mock_verify:
+    with (
+        patch.object(WiseMCPServer, "get_client") as mock_get_client,
+        patch("wise_mcp.server.verify_user_presence") as mock_verify,
+    ):
         mock_get_client.return_value.__aenter__.return_value = mock_client
         res = await server.request_handlers[CallToolRequest](
             CallToolRequest(
@@ -209,9 +214,10 @@ async def test_server_stage_and_fund_transfer_biometric_ttl(
         model_dump=lambda: {"type": "BALANCE", "status": "COMPLETED"}
     )
 
-    with patch.object(WiseMCPServer, "get_client") as mock_get_client, patch(
-        "wise_mcp.server.verify_user_presence", return_value=True
-    ) as mock_verify:
+    with (
+        patch.object(WiseMCPServer, "get_client") as mock_get_client,
+        patch("wise_mcp.server.verify_user_presence", return_value=True) as mock_verify,
+    ):
         mock_get_client.return_value.__aenter__.return_value = mock_client
 
         # 1. stage_transfer -> called with ttl_seconds=300
@@ -264,18 +270,44 @@ async def test_server_stage_and_fund_transfer_biometric_ttl(
             ttl_seconds=0,
         )
 
+        # 4. move_balance -> non-destructive write, called with ttl_seconds=300
+        mock_client.move_balance.return_value = MagicMock(
+            model_dump=lambda: {"id": "mov-777", "state": "COMPLETED"}
+        )
+        res_mov = await server.request_handlers[CallToolRequest](
+            CallToolRequest(
+                params=CallToolRequestParams(
+                    name="move_balance",
+                    arguments={
+                        "source_balance_id": 1,
+                        "target_balance_id": 2,
+                        "amount": 100.0,
+                        "currency": "EUR",
+                        "confirm": True,
+                    },
+                )
+            )
+        )
+        assert res_mov.root.isError is not True
+        mock_verify.assert_called_with(
+            "Wise MCP: Approve balance movement of 100.00 EUR from balance 1 to balance 2?",
+            ttl_seconds=300,
+        )
+
 
 def test_cli_set_token() -> None:
-    with patch("wise_mcp.server.set_keyring_secret") as mock_set, patch(
-        "sys.argv", ["wise-mcp", "--set-token", "my-test-token"]
+    with (
+        patch("wise_mcp.server.set_keyring_secret") as mock_set,
+        patch("sys.argv", ["wise-mcp", "--set-token", "my-test-token"]),
     ):
         main()
         mock_set.assert_called_once_with("wise_mcp", "api_token", "my-test-token")
 
 
 def test_cli_generate_sca_keys_to_keyring() -> None:
-    with patch("wise_mcp.server.set_keyring_secret") as mock_set, patch(
-        "sys.argv", ["wise-mcp", "--generate-sca-keys"]
+    with (
+        patch("wise_mcp.server.set_keyring_secret") as mock_set,
+        patch("sys.argv", ["wise-mcp", "--generate-sca-keys"]),
     ):
         main()
         assert mock_set.call_count == 1
@@ -293,32 +325,38 @@ def test_cli_generate_sca_keys_to_file(tmp_path: Path) -> None:
 
 
 def test_cli_fix_keychain_acl() -> None:
-    with patch(
-        "wise_mcp.server.migrate_macos_keychain_acl", return_value=["api_token"]
-    ), patch("sys.argv", ["wise-mcp", "--fix-keychain-acl"]):
+    with (
+        patch("wise_mcp.server.migrate_macos_keychain_acl", return_value=["api_token"]),
+        patch("sys.argv", ["wise-mcp", "--fix-keychain-acl"]),
+    ):
         main()
 
 
 def test_cli_test_biometric_success() -> None:
-    with patch("wise_mcp.server.verify_user_presence", return_value=True), patch(
-        "sys.argv", ["wise-mcp", "--test-biometric"]
+    with (
+        patch("wise_mcp.server.verify_user_presence", return_value=True),
+        patch("sys.argv", ["wise-mcp", "--test-biometric"]),
     ):
         main()
 
 
 def test_cli_test_biometric_denied() -> None:
-    with patch(
-        "wise_mcp.server.verify_user_presence",
-        side_effect=BiometricVerificationDenied("User canceled"),
-    ), patch("sys.argv", ["wise-mcp", "--test-biometric"]):
+    with (
+        patch(
+            "wise_mcp.server.verify_user_presence",
+            side_effect=BiometricVerificationDenied("User canceled"),
+        ),
+        patch("sys.argv", ["wise-mcp", "--test-biometric"]),
+    ):
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 1
 
 
 def test_cli_check_config(test_mcp_config: MCPConfig) -> None:
-    with patch("wise_mcp.server.MCPConfig", return_value=test_mcp_config), patch(
-        "sys.argv", ["wise-mcp", "--check-config"]
+    with (
+        patch("wise_mcp.server.MCPConfig", return_value=test_mcp_config),
+        patch("sys.argv", ["wise-mcp", "--check-config"]),
     ):
         main()
 
@@ -341,7 +379,8 @@ async def test_server_validation_error(test_mcp_config: MCPConfig) -> None:
     res = await server.request_handlers[CallToolRequest](
         CallToolRequest(
             params=CallToolRequestParams(
-                name="get_exchange_rate", arguments={"source": "EUR"}  # missing 'target'
+                name="get_exchange_rate",
+                arguments={"source": "EUR"},  # missing 'target'
             )
         )
     )
@@ -354,6 +393,35 @@ async def test_server_close_and_lifespan(test_mcp_config: MCPConfig) -> None:
     mcp_srv = WiseMCPServer(test_mcp_config)
     mcp_srv.close()
     await mcp_srv.aclose()
+
+
+def test_cli_show_public_key_success(
+    rsa_keypair: tuple[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    priv_pem, pub_pem = rsa_keypair
+    with (
+        patch("wise_mcp.server.get_keyring_secret", return_value=priv_pem),
+        patch("sys.argv", ["wise-mcp", "--show-public-key"]),
+    ):
+        main()
+        captured = capsys.readouterr().out
+        assert (
+            "PUBLIC KEY FOR WISE API STRONG CUSTOMER AUTHENTICATION (SCA)" in captured
+        )
+        assert "SHA-256 Fingerprint:" in captured
+        assert "-----BEGIN PUBLIC KEY-----" in captured
+
+
+def test_cli_show_public_key_not_found() -> None:
+    with (
+        patch("wise_mcp.server.get_keyring_secret", return_value=None),
+        patch("os.environ.get", return_value=None),
+        patch.object(Path, "is_file", return_value=False),
+        patch("sys.argv", ["wise-mcp", "--show-public-key"]),
+    ):
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
 
 
 @pytest.mark.asyncio

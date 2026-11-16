@@ -153,7 +153,7 @@ class MCPConfig(BaseSettings):
 
     # MCP server configuration
     server_name: str = "wise"
-    server_version: str = "0.1.0"
+    server_version: str = "0.2.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"
     enable_write_tools: bool = False
     require_biometric: bool = Field(
@@ -175,7 +175,11 @@ class MCPConfig(BaseSettings):
     @classmethod
     def resolve_secrets_from_keyring(cls, data: Any) -> Any:
         d = dict(data) if isinstance(data, dict) else {}
-        token = d.get("api_token") or d.get("WISE_MCP_API_TOKEN") or os.environ.get("WISE_MCP_API_TOKEN")
+        token = (
+            d.get("api_token")
+            or d.get("WISE_MCP_API_TOKEN")
+            or os.environ.get("WISE_MCP_API_TOKEN")
+        )
         sca_pem = (
             d.get("sca_private_key_pem")
             or d.get("WISE_MCP_SCA_PRIVATE_KEY_PEM")
@@ -195,7 +199,9 @@ class MCPConfig(BaseSettings):
                     if keyring_token:
                         d["api_token"] = keyring_token
                 if sca_pem is None:
-                    keyring_pem = get_keyring_secret(service_name, "sca_private_key_pem")
+                    keyring_pem = get_keyring_secret(
+                        service_name, "sca_private_key_pem"
+                    )
                     if keyring_pem:
                         d["sca_private_key_pem"] = keyring_pem
             except Exception:  # nosec B110
@@ -216,7 +222,9 @@ class MCPConfig(BaseSettings):
         if parsed.scheme != "https" or not parsed.hostname:
             raise HostSecurityError("api_url must be an absolute HTTPS URL")
         if parsed.username or parsed.password:
-            raise HostSecurityError("api_url must not contain embedded user credentials")
+            raise HostSecurityError(
+                "api_url must not contain embedded user credentials"
+            )
 
         hostname = parsed.hostname.lower()
         if not self.allow_custom_api_url and hostname not in OFFICIAL_API_HOSTS:

@@ -32,10 +32,14 @@ def generate_rsa_keypair(key_size: int = 2048) -> tuple[str, str]:
         encryption_algorithm=serialization.NoEncryption(),
     ).decode("utf-8")
 
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
 
     return private_pem, public_pem
 
@@ -105,3 +109,59 @@ def sign_one_time_token(
         return base64.b64encode(signature).decode("ascii")
     except Exception as exc:
         raise SCARequiredError(f"Failed to sign SCA one-time token: {exc}") from exc
+
+
+def get_public_key_pem(
+    private_key_pem: str | bytes, password: bytes | None = None
+) -> str:
+    """Derive RSA public key PEM from private key PEM.
+
+    Args:
+        private_key_pem: The RSA private key in PEM format.
+        password: Optional password if the private key is encrypted.
+
+    Returns:
+        Public key as PEM-encoded string.
+    """
+    key = load_private_key(private_key_pem, password=password)
+    return (
+        key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
+
+
+def get_public_key_fingerprint(
+    key_pem: str | bytes,
+    password: bytes | None = None,
+) -> str:
+    """Compute SHA-256 fingerprint (colon-separated hex) of an RSA public key.
+
+    Accepts either an RSA private key PEM or a public key PEM.
+
+    Args:
+        key_pem: Private or public key PEM data.
+        password: Optional password if private key is encrypted.
+
+    Returns:
+        Colon-separated hex SHA-256 fingerprint (e.g. '25:7e:...').
+    """
+    import hashlib
+
+    raw_str = key_pem.decode("utf-8") if isinstance(key_pem, bytes) else key_pem
+    if "PRIVATE KEY" in raw_str:
+        priv_key = load_private_key(raw_str, password=password)
+        pub_key = priv_key.public_key()
+    else:
+        raw_bytes = raw_str.encode("utf-8")
+        pub_key = serialization.load_pem_public_key(raw_bytes)
+
+    der = pub_key.public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    fp_hex = hashlib.sha256(der).hexdigest()
+    return ":".join(fp_hex[i : i + 2] for i in range(0, len(fp_hex), 2))

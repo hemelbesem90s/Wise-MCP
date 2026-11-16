@@ -27,9 +27,7 @@ class GetExchangeRateTool(BaseTool):
     """Get live or historical mid-market foreign exchange rates."""
 
     name = "get_exchange_rate"
-    description = (
-        "Retrieve live or historical mid-market exchange rates between currency pairs directly from Wise."
-    )
+    description = "Retrieve live or historical mid-market exchange rates between currency pairs directly from Wise."
     input_schema = GetExchangeRateInput
 
     async def execute(

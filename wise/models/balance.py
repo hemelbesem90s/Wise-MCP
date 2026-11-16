@@ -41,4 +41,38 @@ class Balance(BaseModel):
     name: str | None = Field(
         default=None, description="Custom jar name (if type is SAVINGS)"
     )
-    icon: Any = Field(default=None, description="Optional icon identifier or emoji object")
+    icon: Any = Field(
+        default=None, description="Optional icon identifier or emoji object"
+    )
+
+
+class BalanceMovement(BaseModel):
+    """Wise internal balance movement or jar transfer."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: int | str | None = Field(default=None, description="Unique movement identifier")
+    state: str | None = Field(
+        default=None, description="Lifecycle state of the movement"
+    )
+    status: str | None = Field(default=None, description="Status alias of the movement")
+    sourceBalanceId: int | None = Field(
+        default=None, description="Source balance or jar ID"
+    )
+    targetBalanceId: int | None = Field(
+        default=None, description="Target balance or jar ID"
+    )
+    sourceAmount: BalanceAmount | dict[str, Any] | None = Field(
+        default=None, description="Amount debited from source balance"
+    )
+    targetAmount: BalanceAmount | dict[str, Any] | None = Field(
+        default=None, description="Amount credited to target balance"
+    )
+    quoteId: str | int | None = Field(
+        default=None, description="FX quote ID if cross-currency conversion"
+    )
+    steps: list[Any] | None = Field(
+        default=None, description="Execution steps of the movement"
+    )
+    createdOn: str | None = Field(default=None, description="Creation timestamp")
+    updatedOn: str | None = Field(default=None, description="Update timestamp")
